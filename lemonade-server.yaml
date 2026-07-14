@@ -1,0 +1,50 @@
+#cloud-config
+# Install Lemonade Server from its Launchpad PPA and bring up an OpenAI-compatible
+# endpoint on first boot.
+#
+# vllm-docker.yaml stands the serving stack UP on the box. This one INSTALLS it: the
+# server, model manager and web UI arrive as a signed Debian package, so there is no
+# container to pull and no ROCm/PyTorch reconciliation to get right.
+#
+#   Project: https://lemonade-server.ai
+#   PPA:     https://launchpad.net/~lemonade-team/+archive/ubuntu/stable
+#
+# The package creates a `lemonade` system user, adds it to `render` for GPU access, and
+# enables lemond.service. The server listens on 127.0.0.1:13305. ufw permits port 22
+# only, so reach it over an SSH tunnel — see the README.
+
+apt:
+  sources:
+    lemonade-stable:
+      source: "ppa:lemonade-team/stable"
+
+package_update: true
+
+packages:
+  - lemonade-server
+
+runcmd:
+  - |
+    # The `lemonade` CLI is an HTTP client for the daemon, not a local tool — so wait
+    # for lemond to answer before asking it to do anything. Everything below is a
+    # request TO the server, and the server does the work in its own cache.
+    echo "Waiting for lemond..."
+    for _ in $(seq 1 60); do
+      curl -sf http://localhost:13305/api/v1/health >/dev/null 2>&1 && break
+      sleep 2
+    done
+  - |
+    # Install the ROCm llama.cpp backend for this GPU. The server downloads a prebuilt
+    # backend — nothing is compiled on the box.
+    echo "Installing the ROCm llama.cpp backend..."
+    lemonade backends install llamacpp:rocm
+  - |
+    # Optional: pre-pull a model so the first request is warm. Skip it and the server
+    # will pull on demand instead. Any model in the registry works; `lemonade list`
+    # shows them.
+    echo "Pulling a model..."
+    lemonade pull Qwen3-8B-GGUF
+  - |
+    echo "Lemonade Server is ready on 127.0.0.1:13305"
+    lemonade backends
+    lemonade status

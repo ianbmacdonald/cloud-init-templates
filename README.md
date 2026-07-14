@@ -6,6 +6,70 @@ Example cloud-init templates for HotManager VM provisioning.
 
 Starts vLLM Docker container with GPU acceleration on first boot.
 
+## lemonade-server.yaml
+
+Installs [Lemonade Server](https://lemonade-server.ai) from its
+[PPA](https://launchpad.net/~lemonade-team/+archive/ubuntu/stable) and brings up an
+OpenAI-compatible endpoint on first boot.
+
+Where `vllm-docker.yaml` stands a serving stack up on the box, this one installs one: the
+server, model manager and web UI arrive as a signed Debian package, so there is no
+container to pull and no ROCm/PyTorch reconciliation to get right. The server then fetches
+a prebuilt ROCm llama.cpp backend for the GPU it finds — nothing is compiled on the box.
+
+The package creates a `lemonade` system user, adds it to `render` for GPU access, and
+enables `lemond.service`, which listens on `127.0.0.1:13305`.
+
+```bash
+curl -X 'POST' \
+  "${API_BASE}/teams/${TEAM_SLUG}/virtual_machines/" \
+  -H 'accept: application/json' \
+  -H "Authorization: Token ${API_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "gpus": [
+      {
+        "count": 1,
+        "manufacturer": "AMD",
+        "model": "MI300X"
+      }
+    ],
+    "user_data_url": "https://raw.githubusercontent.com/hotaisle/cloud-init-templates/master/lemonade-server.yaml"
+  }'
+```
+
+### Accessing Lemonade
+
+ufw permits port 22 only, so forward the port over SSH:
+
+```bash
+ssh -L 13305:localhost:13305 hotaisle@<vm-ip>
+```
+
+Then, from your machine — the API is OpenAI-compatible, so any OpenAI client works by
+pointing `base_url` at it:
+
+```bash
+curl http://localhost:13305/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen3-8B-GGUF",
+    "messages": [{"role": "user", "content": "Write a haiku about artificial intelligence"}],
+    "max_tokens": 128
+  }'
+```
+
+The web UI is on the same port, at <http://localhost:13305>.
+
+On the VM itself, `lemonade` is a CLI client for the running server:
+
+```bash
+lemonade status        # what is loaded
+lemonade list          # available models
+lemonade pull <model>  # fetch another model
+lemonade backends      # backends and the GPU they resolved to
+```
+
 ## API Usage
 
 ### Environment Variables
