@@ -167,3 +167,22 @@ For the complete Hot Aisle API documentation and Swagger reference:
 
 For complete cloud-init documentation and reference:
 <https://cloudinit.readthedocs.io/en/latest/reference/index.html>
+
+## ocr-batch-client.py
+
+Drives a document OCR pass against an OpenAI-compatible vision endpoint (either template's
+serving stack), submitting pages **concurrently** so a batching server (vLLM) overlaps
+them. Sequential submission gives you llama.cpp-shaped numbers even on vLLM; `--concurrency`
+is what turns continuous batching into wall-clock. Measured on one MI300X, 8 pages: vLLM
+3.3x faster at concurrency=4 than at 1, while llama.cpp stayed flat. Stdlib-only, JSONL
+output, resumable. Sweep `--concurrency` (1/2/4/8/16) on your endpoint and keep the best
+pages/hour.
+
+```bash
+./ocr-batch-client.py --endpoint http://127.0.0.1:8000 \
+  --model Qwen/Qwen3-VL-30B-A3B-Instruct-FP8 \
+  --input-dir ./pages --concurrency 4 --out results.jsonl
+```
+
+Note: a rented GPU box is third-party infrastructure; the images are transported to it and
+sit on its disk. Whether that fits a given data-handling posture is a risk-owner decision.
