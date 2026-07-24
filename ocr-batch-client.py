@@ -33,11 +33,19 @@ CONTRACT
 STDLIB ONLY — no pip install on the box. Auth via --api-key or $OCR_API_KEY (sent as
 Bearer) when the endpoint requires it.
 
-DATA-HANDLING NOTE (read before pointing this at client documents): a rented/metered GPU
-box is third-party infrastructure. The images you send are transported to it and sit on
-its disk. "Nothing goes to an external AI *service*" and "the data never leaves
-infrastructure we control" are different claims; only the first is true of a rented box.
-That is a risk-owner decision, not a default.
+DATA-HANDLING — the NO-DATA-AT-REST pattern (proven in production, 1531 client pages):
+run THIS CLIENT ON YOUR OWN MACHINE, reading images from your own disk, and reach the
+remote server over an SSH tunnel — do NOT copy the images to the rented box. The server
+serves on the host (a `--network host` container binds the host port), so a plain
+`ssh -N -L 8000:localhost:<server-port> user@box` forwards it, and you point
+`--endpoint http://127.0.0.1:8000` at the tunnel. Net effect: each page's pixels exist on
+the rented box only transiently in the vLLM process during its own request; NO client file
+is ever written to the box's disk. This makes "the data never leaves infrastructure we
+control" much closer to true than an rsync-the-images-over approach (which lands them on
+disk). Still a risk-owner decision, but this is the pattern that satisfies the stronger
+claim. NOTE the tunnel LOCAL port and the server's actual `--port` need not match; set
+--endpoint to whatever you forwarded to. (If you instead run the client ON the box, the
+images do land on its disk — the weaker posture.)
 """
 import argparse
 import base64
