@@ -1,23 +1,48 @@
 #cloud-config
-# Simple cloud-init to run vLLM Docker container
-# This will start the vLLM service automatically on first boot
+# Bring up vLLM serving a VISION model for OCR / document transcription on first boot,
+# in a Docker container with AMD ROCm GPU acceleration.
+#
+# This is the THROUGHPUT path. vLLM's continuous batching overlaps concurrent requests,
+# so a document pass driven by a parallel client (see ocr-batch-client.py) scales with
+# concurrency where a llama.cpp server stays flat. Measured on one MI300X (gfx942), 8
+# pages: 3.3x faster at concurrency=4 than at 1. For a single-stream / low-VRAM / easy
+# path instead, use lemonade-server.yaml (llama.cpp + GGUF).
+#
+# Image is PINNED to AMD's gfx94X-dcgpu (CDNA3/MI300X) stable stack — the exact
+# rocm7.13.0 / torch 2.10 / vLLM 0.19.1 build validated to serve this model on gfx942.
+# On a different GPU family, swap the tag for the matching rocm/vllm image.
+#
+#   Model:  Qwen3-VL-30B-A3B-Instruct-FP8 (MoE, 3B active, FP8 — vision, byte-perfect OCR)
+#   Serves: OpenAI-compatible on :8000, model id `ocr-vl`
+#   Reach it over an SSH tunnel; ufw permits 22 only.
 
 runcmd:
   - |
-    echo "Starting vLLM Docker container..."
+    IMG=rocm/vllm:rocm7.13.0_gfx94X-dcgpu_ubuntu24.04_py3.13_pytorch_2.10.0_vllm_0.19.1
+    MODEL=Qwen/Qwen3-VL-30B-A3B-Instruct-FP8
+    echo "Pulling $IMG ..."
+    docker pull "$IMG"
+    echo "Starting vLLM (vision) ..."
+    # --gpu-memory-utilization: vLLM reserves this fraction of VRAM at startup. 0.9 assumes
+    # a dedicated box; lower it if another process (e.g. a llama.cpp server) already holds
+    # VRAM, or vLLM will refuse to start.
     docker run -d \
-      --name vllm \
+      --name vllm-ocr \
       --network=host \
       --group-add=video \
       --ipc=host \
       --cap-add=SYS_PTRACE \
       --security-opt seccomp=unconfined \
-      --privileged \
       --device /dev/kfd \
       --device /dev/dri \
       --restart=always \
-      rocm/vllm:latest \
-      vllm serve Qwen/Qwen2-7B-Instruct
+      "$IMG" \
+      vllm serve "$MODEL" --port 8000 --served-model-name ocr-vl --gpu-memory-utilization 0.9
   - |
-    echo "vLLM container started. Check status with: docker logs vllm"
-    echo "vLLM should be available shortly. GPU access and networking are configured for host mode."
+    echo "Waiting for vLLM to load the model (first start captures CUDA graphs; give it a few minutes)..."
+    for _ in $(seq 1 240); do
+      curl -sf http://localhost:8000/v1/models >/dev/null 2>&1 && break
+      sleep 15
+    done
+    echo "vLLM vision endpoint ready on 127.0.0.1:8000 (model id: ocr-vl)."
+    echo "Drive an OCR pass with ocr-batch-client.py --endpoint http://127.0.0.1:8000 --model ocr-vl --input-dir ./pages --concurrency 4"

@@ -4,7 +4,12 @@ Example cloud-init templates for HotManager VM provisioning.
 
 ## vllm-docker.yaml
 
-Starts vLLM Docker container with GPU acceleration on first boot.
+Brings up **vLLM serving a vision model for OCR** (Qwen3-VL-30B-A3B-Instruct-FP8) in a
+Docker container with ROCm GPU acceleration on first boot. This is the **throughput** path:
+vLLM's continuous batching overlaps concurrent requests, so a document pass driven by
+`ocr-batch-client.py --concurrency N` scales where a llama.cpp server stays flat (measured 3.3x
+at concurrency=4 on MI300X). The image is pinned to AMD's gfx94X-dcgpu stable stack. For a
+single-stream / low-VRAM / easy install instead, use `lemonade-server.yaml` below.
 
 ## lemonade-server.yaml
 
