@@ -36,8 +36,28 @@ runcmd:
   - |
     # Install the ROCm llama.cpp backend for this GPU. The server downloads a prebuilt
     # backend — nothing is compiled on the box.
+    #
+    # Install rocm EXPLICITLY and do not install the vulkan backend. On a virtualised
+    # GPU (SR-IOV) Mesa often cannot bind the passed-through render node, so the only
+    # Vulkan device that enumerates is `llvmpipe` — a CPU software rasteriser. llama.cpp
+    # then initialises against it *successfully* and runs the model on the CPU at
+    # roughly 1/50th the speed, with no error and no warning anywhere. Installing only
+    # rocm means there is no software device for auto-select to pick.
     echo "Installing the ROCm llama.cpp backend..."
     lemonade backends install llamacpp:rocm
+  - |
+    # Large models: force --no-mmap. llama.cpp memory-maps the GGUF by default, so a
+    # model FILE larger than host RAM can never be cached — every pass over it evicts
+    # the last and the load thrashes the page cache indefinitely. It does not fail; it
+    # simply never finishes, and the server is restarted on a loop. Measured on a
+    # 340 GiB model against 220 GiB of RAM: page cache pinned at 213 GiB, ~2 GiB/s of
+    # sustained disk read, no progress. With --no-mmap the same load reaches 171 GiB
+    # resident in 39 seconds.
+    #
+    # Harmless when the model does fit in RAM (slower initial read, no other effect),
+    # so it is safe to set unconditionally here.
+    echo "Disabling mmap for large-model loads..."
+    lemonade config set llamacpp.args="--no-mmap"
   - |
     # Optional: pre-pull a model so the first request is warm. Skip it and the server
     # will pull on demand instead. Any model in the registry works; `lemonade list`
