@@ -75,6 +75,43 @@ lemonade pull <model>  # fetch another model
 lemonade backends      # backends and the GPU they resolved to
 ```
 
+
+## lemonade-vllm-mi300x.yaml
+
+Installs [Lemonade Server](https://lemonade-server.ai) with **vLLM** for AMD Instinct MI300X
+(gfx942) and brings up an OpenAI-compatible endpoint on first boot.
+
+Upstream Lemonade does not enable vLLM on MI300X yet, so this template installs a
+[Netstatz fork build](https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-c6d56fdb)
+of the server package. The server then downloads a prebuilt vLLM 0.30.1 + ROCm 7.15 bundle
+with AITER's prebuilt kernels; nothing is compiled on the box. The template checks the
+package against its published sha256 before installing it.
+
+```bash
+curl -X 'POST' \
+  "${API_BASE}/teams/${TEAM_SLUG}/virtual_machines/" \
+  -H 'accept: application/json' \
+  -H "Authorization: Token ${API_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "gpus": [
+      {
+        "count": 1,
+        "manufacturer": "AMD",
+        "model": "MI300X"
+      }
+    ],
+    "user_data_url": "https://raw.githubusercontent.com/ianbmacdonald/cloud-init-templates/feat/lemonade-server-apt/lemonade-vllm-mi300x.yaml"
+  }'
+```
+
+Access is the same as for `lemonade-server.yaml`: forward port 13305 over SSH. The
+pre-pulled model is `Qwen3.8-Flash-Next-FP8-vLLM`; loading it takes 5-10 minutes.
+
+Measured with this setup on one MI300X (2026-10-23/24), through port 13305: 142 / 119 / 125
+tok/s per stream at 1 / 2 / 3 concurrent streams, 474 tok/s across 8 streams, 8.8k tok/s
+prefill on a 115k-token prompt, 262k context.
+
 ## API Usage
 
 ### Environment Variables

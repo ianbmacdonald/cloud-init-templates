@@ -1,0 +1,57 @@
+#cloud-config
+# Install Lemonade Server with vLLM for AMD Instinct MI300X (gfx942) and bring up an
+# OpenAI-compatible endpoint on first boot.
+#
+# This uses a Netstatz fork build of lemonade-server, not the Lemonade PPA: upstream
+# Lemonade does not enable vLLM on MI300X yet. The fork pins a vLLM 0.30.1 + ROCm 7.15
+# bundle with AITER's prebuilt kernels, so nothing is compiled on the box and no system
+# ROCm is needed for vLLM.
+#
+#   Server:       https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-c6d56fdb
+#   vLLM bundle:  https://github.com/ianbmacdonald/vllm-rocm-cdna/releases
+#
+# Every step below ran on a Hot Aisle 1x MI300X (Ubuntu 24.04.4) on 2026-10-23/24. The
+# package creates a `lemonade` system user, adds it to `render` for GPU access, and starts
+# lemond.service, which listens on 127.0.0.1:13305. ufw permits port 22 only, so reach it
+# over an SSH tunnel — see the README.
+
+# The package's dependencies (libwebsockets, libcurl) resolve only from fresh package lists.
+package_update: true
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - |
+    # Download the server package, check it against its published sha256, and install it.
+    set -e
+    BASE=https://github.com/ianbmacdonald/lemonade/releases/download/cdna-vllm-2026.45.0-c6d56fdb
+    DEB=lemonade-server-2026.45.0.1738.c6d56fdb.x86_64.deb
+    cd /tmp
+    curl -fsSLO "$BASE/$DEB"
+    curl -fsSLO "$BASE/$DEB.sha256"
+    sha256sum -c "$DEB.sha256"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "./$DEB"
+  - |
+    # The `lemonade` CLI is an HTTP client for the daemon, so wait for lemond to answer.
+    echo "Waiting for lemond..."
+    for _ in $(seq 1 60); do
+      curl -sf http://localhost:13305/api/v1/health >/dev/null 2>&1 && break
+      sleep 2
+    done
+  - |
+    # Install the vLLM backend: lemond downloads the 4.6 GB bundle (about 4 minutes).
+    echo "Installing the vLLM backend..."
+    lemonade backends install vllm:rocm
+  - |
+    # Optional: pre-pull a model so the first load does not wait on the download.
+    # Qwen3.8-Flash-Next-FP8-vLLM is 185 GB, about 25 minutes through lemond; it is
+    # registered with MTP, a 262k context and the AITER settings it needs. Skip this
+    # and lemond pulls the model on its first load instead.
+    echo "Pulling Qwen3.8-Flash-Next-FP8-vLLM..."
+    lemonade pull Qwen3.8-Flash-Next-FP8-vLLM
+  - |
+    echo "Lemonade Server with vLLM is ready on 127.0.0.1:13305"
+    lemonade backends
+    lemonade status
