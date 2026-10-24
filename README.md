@@ -82,7 +82,7 @@ Installs [Lemonade Server](https://lemonade-server.ai) with **vLLM** for AMD Ins
 (gfx942) and brings up an OpenAI-compatible endpoint on first boot.
 
 Upstream Lemonade does not enable vLLM on MI300X yet, so this template installs a
-[Netstatz fork build](https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-c6d56fdb)
+[Netstatz fork build](https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-1d006e33)
 of the server package. The server then downloads a prebuilt vLLM 0.30.1 + ROCm 7.15 bundle
 with AITER's prebuilt kernels; nothing is compiled on the box. The template checks the
 package against its published sha256 before installing it.

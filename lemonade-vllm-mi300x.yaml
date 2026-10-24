@@ -7,7 +7,7 @@
 # bundle with AITER's prebuilt kernels, so nothing is compiled on the box and no system
 # ROCm is needed for vLLM.
 #
-#   Server:       https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-c6d56fdb
+#   Server:       https://github.com/ianbmacdonald/lemonade/releases/tag/cdna-vllm-2026.45.0-1d006e33
 #   vLLM bundle:  https://github.com/ianbmacdonald/vllm-rocm-cdna/releases
 #
 # Every step below ran on a Hot Aisle 1x MI300X (Ubuntu 24.04.4) on 2026-10-23/24. The
@@ -26,8 +26,8 @@ runcmd:
   - |
     # Download the server package, check it against its published sha256, and install it.
     set -e
-    BASE=https://github.com/ianbmacdonald/lemonade/releases/download/cdna-vllm-2026.45.0-c6d56fdb
-    DEB=lemonade-server-2026.45.0.1738.c6d56fdb.x86_64.deb
+    BASE=https://github.com/ianbmacdonald/lemonade/releases/download/cdna-vllm-2026.45.0-1d006e33
+    DEB=lemonade-server-2026.45.0.1740.1d006e33.x86_64.deb
     cd /tmp
     curl -fsSLO "$BASE/$DEB"
     curl -fsSLO "$BASE/$DEB.sha256"
